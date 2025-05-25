@@ -1,0 +1,39 @@
+Dokcerfile content
+
+FROM python:3.9-slim
+
+# Install zip and cleanup tools
+RUN apt-get update && apt-get install -y zip && apt-get clean
+
+# Set working directory
+WORKDIR /layer
+
+# Create the target directory
+RUN mkdir -p python
+
+# Install aws-encryption-sdk without boto3 and extras
+RUN pip install aws-encryption-sdk --no-deps --target python
+
+# Install missing dependencies: attrs and specific cryptography version
+RUN pip install attrs --target python
+RUN pip install cryptography==3.4.8 requests-aws4auth --target python
+RUN pip install wrapt --target python
+
+# Add shim for incorrect `import attr` usage
+RUN echo "import attrs; globals().update(vars(attrs))" > python/attr.py
+
+# Clean up unnecessary files
+RUN find python -name "tests" -type d -exec rm -rf {} + \
+    && find python -name "__pycache__" -type d -exec rm -rf {} + \
+    && find python -name "*.dist-info" -exec rm -rf {} + \
+    && find python -name "*.egg-info" -exec rm -rf {} +
+
+RUN cd /layer && zip -r aws_encryption_sdk_layer.zip python
+
+
+steps to start docker and build custom layer zip file.
+
+docker build -t das-layer .
+docker create --name extract-layer das-layer
+docker cp extract-layer:/layer/aws_encryption_sdk_layer.zip .
+docker rm extract-layer
